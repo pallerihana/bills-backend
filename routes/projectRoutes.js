@@ -348,9 +348,21 @@ r.get('/:id/excel', h(async (req, res) => {
 r.get('/:id/proofs', h(async (req, res) => {
   const p = await own(req), [ex, co] = await billsOf(p._id);
   if (!ex.length && !co.length) throw err('No submissions yet');
+
   const cleaned = [...ex, ...co].some(b => b.proofDeleted);
-  const pdf = cleaned && p.finalDocPublicId ? await store.readFinalDoc(p) : await buildProofDoc(p, ex, await nameMap(p._id), co);
-  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="expense-proofs.pdf"' });
+  const result = cleaned && p.finalDocPublicId
+    ? await store.readFinalDoc(p)
+    : await buildProofDoc(p, ex, await nameMap(p._id), co);
+
+  // Make sure we always send a real Buffer so Content-Length is exact
+  const pdf = Buffer.isBuffer(result) ? result : Buffer.from(result);
+
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Length': pdf.length,          // lets the browser show 0-100%
+    'Content-Disposition': 'attachment; filename="expense-proofs.pdf"',
+    'Cache-Control': 'no-store',
+  });
   res.send(pdf);
 }));
 
